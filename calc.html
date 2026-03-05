@@ -8,25 +8,28 @@
     <style>
         :root {
             --primary: #0056b3;
-            --success: #28a745;
+            --major: #28a745;     /* 專業必修 深綠 */
+            --common: #17a2b8;    /* 校共同必修 藍綠 */
+            --gened: #6f42c1;     /* 通識必修 紫色 */
+            --elective: #fd7e14;  /* 選修 橘色 */
             --danger: #dc3545;
-            --info: #17a2b8;
             --bg: #f8f9fa;
         }
-        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; max-width: 900px; margin: 20px auto; padding: 0 20px; color: #333; line-height: 1.6; }
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; max-width: 1000px; margin: 20px auto; padding: 0 20px; color: #333; line-height: 1.6; }
         h1 { text-align: center; color: var(--primary); }
         .upload-area { margin-bottom: 20px; padding: 30px; border: 2px dashed #adb5bd; border-radius: 8px; text-align: center; background-color: #fff; transition: 0.3s; }
         .upload-area:hover { border-color: var(--primary); background-color: #f1f7ff; }
         input[type="file"] { font-size: 16px; cursor: pointer; }
         #status { font-weight: bold; color: var(--primary); text-align: center; margin-bottom: 20px; min-height: 24px; }
         
-        /* 數據統計區 */
-        .dashboard { display: flex; gap: 15px; margin-bottom: 30px; display: none; flex-wrap: wrap; }
-        .card { flex: 1; min-width: 150px; background: var(--bg); padding: 15px; border-radius: 8px; text-align: center; box-shadow: 0 2px 4px rgba(0,0,0,0.1); border-bottom: 4px solid #ccc; display: flex; flex-direction: column; justify-content: center; }
+        /* 數據統計區 (五張卡片) */
+        .dashboard { display: flex; gap: 15px; margin-bottom: 30px; display: none; flex-wrap: wrap; justify-content: center; }
+        .card { flex: 1; min-width: 160px; background: var(--bg); padding: 15px; border-radius: 8px; text-align: center; box-shadow: 0 2px 4px rgba(0,0,0,0.1); border-bottom: 4px solid #ccc; display: flex; flex-direction: column; justify-content: center; }
         .card.total { border-color: var(--primary); }
-        .card.required { border-color: var(--success); }
-        .card.elective { border-color: #fd7e14; }
-        .card.gened { border-color: var(--info); }
+        .card.major { border-color: var(--major); }
+        .card.common { border-color: var(--common); }
+        .card.gened { border-color: var(--gened); }
+        .card.elective { border-color: var(--elective); }
         .card h3 { margin: 0 0 5px 0; font-size: 14px; color: #555; }
         .card .number { font-size: 28px; font-weight: bold; color: #222; }
         .gened-tags { font-size: 12px; color: #666; margin-top: 5px; min-height: 18px; font-weight: bold; }
@@ -35,17 +38,22 @@
         th, td { padding: 12px 15px; text-align: left; border-bottom: 1px solid #ddd; }
         th { background-color: var(--primary); color: white; position: sticky; top: 0; }
         tr:hover { background-color: #f5f5f5; }
-        .badge { padding: 4px 8px; border-radius: 4px; font-size: 12px; font-weight: bold; color: white; }
-        .bg-required { background-color: var(--success); }
-        .bg-elective { background-color: #fd7e14; }
-        .text-pass { color: var(--success); font-weight: bold; }
+        
+        /* 動態標籤顏色 */
+        .badge { padding: 4px 8px; border-radius: 4px; font-size: 12px; font-weight: bold; color: white; white-space: nowrap; }
+        .bg-major { background-color: var(--major); }
+        .bg-common { background-color: var(--common); }
+        .bg-gened { background-color: var(--gened); }
+        .bg-elective { background-color: var(--elective); }
+        
+        .text-pass { color: var(--major); font-weight: bold; }
         .text-fail { color: var(--danger); font-weight: bold; }
     </style>
 </head>
 <body>
 
     <h1>高科大學分計算器</h1>
-    <p style="text-align: center; color: #666;"> 本系統皆在本地運行 PDF不會上傳伺服器 </p>
+    <p style="text-align: center; color: #666;">本系統皆在本地運行 PDF不會上傳伺服器</p>
     
     <div class="upload-area">
         <label for="uploader" style="display: block; margin-bottom: 10px; font-weight: bold;">請選擇您的高科大成績單 PDF 檔案：</label>
@@ -59,25 +67,29 @@
             <h3>實得總學分</h3>
             <div class="number" id="total-credits">0</div>
         </div>
-        <div class="card required">
-            <h3>必修學分 (及格)</h3>
-            <div class="number" id="required-credits">0</div>
+        <div class="card major">
+            <h3>專業必修</h3>
+            <div class="number" id="major-req-credits">0</div>
         </div>
-        <div class="card elective">
-            <h3>選修學分 (及格)</h3>
-            <div class="number" id="elective-credits">0</div>
+        <div class="card common">
+            <h3>校共同必修</h3>
+            <div class="number" id="common-req-credits">0</div>
         </div>
         <div class="card gened">
-            <h3>通識分數 (及格)</h3>
-            <div class="number" id="gened-credits">0</div>
+            <h3>通識必修</h3>
+            <div class="number" id="gened-req-credits">0</div>
             <div class="gened-tags" id="gened-tags"></div>
+        </div>
+        <div class="card elective">
+            <h3>選修學分</h3>
+            <div class="number" id="elective-credits">0</div>
         </div>
     </div>
 
     <table id="course-table">
         <thead>
             <tr>
-                <th>修別</th>
+                <th>修別分類</th>
                 <th>課程名稱</th>
                 <th>學分</th>
                 <th>成績</th>
@@ -107,15 +119,14 @@
             return false;
         };
 
-        // 修改：將「博雅」加入排序權重第二順位
         function getCategoryRank(courseName) {
             if (/校(訂|定)/.test(courseName)) return 1;
             if (/通識|博雅/.test(courseName)) return 2;
             if (/中文|國文/.test(courseName)) return 3;
             if (/英文/.test(courseName)) return 4;
-            if (/微積分/.test(courseName)) return 5;
-            if (/體育/.test(courseName)) return 6;
-            if (/服務教育/.test(courseName)) return 7;
+            if (/體育/.test(courseName)) return 5;
+            if (/服務教育/.test(courseName)) return 6;
+            if (/微積分/.test(courseName)) return 7;
             return 8; 
         }
 
@@ -129,7 +140,7 @@
             const file = e.target.files[0];
             if (!file || file.type !== 'application/pdf') return;
 
-            statusEl.innerText = '正在使用動態資料分群掃描 PDF...';
+            statusEl.innerText = '正在掃描與智慧分群 PDF 資料...';
             resetUI();
 
             try {
@@ -210,11 +221,12 @@
             const blocks = text.split('===COLUMN_BREAK===');
             let courses = [];
             
-            // 學分計算變數
-            let reqCredits = 0;
-            let eleCredits = 0;
-            let genEdCredits = 0;
-            let genEdTags = new Set(); // 使用 Set 來確保領域標籤不會重複
+            // 更精細的學分計算變數
+            let majorReqCredits = 0;   // 專業必修
+            let commonReqCredits = 0;  // 校共同必修
+            let genEdReqCredits = 0;   // 通識必修
+            let eleCredits = 0;        // 選修
+            let genEdTags = new Set(); // 通識領域標籤
 
             const regex = /(必|選)(?:\s*\|\s*)+([^\|]+?)(?:\s*\|\s*)+(\d+\.\d+)(?:\s*\|\s*)+([0-9\.]+|通過)/g;
 
@@ -239,7 +251,21 @@
                     const scoreStr = match[4];
                     const isPass = scoreStr === '通過' || parseFloat(scoreStr) >= 60;
 
-                    const courseObj = { type, name, credit, score: scoreStr, isPass };
+                    // 判斷次類別 (Sub-category)
+                    let subType = '';
+                    if (type === '選') {
+                        subType = '選修';
+                    } else if (type === '必') {
+                        if (/(中文|國文|英文|體育|服務教育)/.test(name)) {
+                            subType = '校共同必修';
+                        } else if (/(校定|校訂|通識|博雅)/.test(name)) {
+                            subType = '通識必修';
+                        } else {
+                            subType = '專業必修';
+                        }
+                    }
+
+                    const courseObj = { type, subType, name, credit, score: scoreStr, isPass };
                     courses.push(courseObj);
                     
                     prevCourse = courseObj;
@@ -258,6 +284,7 @@
                 return;
             }
 
+            // 完美的排序
             courses.sort((a, b) => {
                 const rankA = getCategoryRank(a.name);
                 const rankB = getCategoryRank(b.name);
@@ -277,17 +304,19 @@
             // 計算學分與萃取通識標籤
             courses.forEach(c => {
                 if (c.isPass) {
-                    if (c.type === '必') reqCredits += c.credit;
-                    if (c.type === '選') eleCredits += c.credit;
-
-                    // 修改：獨立計算通識/博雅學分，並抓取括號內的文字
-                    if (/通識|博雅/.test(c.name)) {
-                        genEdCredits += c.credit;
+                    if (c.subType === '選修') {
+                        eleCredits += c.credit;
+                    } else if (c.subType === '專業必修') {
+                        majorReqCredits += c.credit;
+                    } else if (c.subType === '校共同必修') {
+                        commonReqCredits += c.credit;
+                    } else if (c.subType === '通識必修') {
+                        genEdReqCredits += c.credit;
                         
-                        // 使用正規表達式抓取半形 () 或全形 （） 內的文字
+                        // 抓取括號內的文字
                         const tagMatch = c.name.match(/[\(（]([^)）]+)[\)）]/);
                         if (tagMatch && tagMatch[1]) {
-                            // 排除像是 (一)、(二) 這種集數標籤，只抓領域名稱
+                            // 過濾掉 (一)、(二) 這種集數標籤
                             if (!/^[一二三四五六七八九十]$/.test(tagMatch[1])) {
                                 genEdTags.add(tagMatch[1]);
                             }
@@ -296,19 +325,30 @@
                 }
             });
 
-            statusEl.innerText = `解析完成！共找到 ${courses.length} 筆課程紀錄。`;
-            document.getElementById('required-credits').innerText = reqCredits.toFixed(1);
-            document.getElementById('elective-credits').innerText = eleCredits.toFixed(1);
-            document.getElementById('total-credits').innerText = (reqCredits + eleCredits).toFixed(1);
-            
-            // 更新通識分數 UI 與標籤
-            document.getElementById('gened-credits').innerText = genEdCredits.toFixed(1);
-            const tagsArray = Array.from(genEdTags);
-            document.getElementById('gened-tags').innerText = tagsArray.length > 0 ? `領域：${tagsArray.join(', ')}` : '';
+            const totalCredits = majorReqCredits + commonReqCredits + genEdReqCredits + eleCredits;
 
+            statusEl.innerText = `解析完成！共找到 ${courses.length} 筆課程紀錄。`;
+            document.getElementById('total-credits').innerText = totalCredits.toFixed(1);
+            document.getElementById('major-req-credits').innerText = majorReqCredits.toFixed(1);
+            document.getElementById('common-req-credits').innerText = commonReqCredits.toFixed(1);
+            document.getElementById('gened-req-credits').innerText = genEdReqCredits.toFixed(1);
+            document.getElementById('elective-credits').innerText = eleCredits.toFixed(1);
+            
+            // 更新通識標籤 UI
+            const tagsArray = Array.from(genEdTags);
+            document.getElementById('gened-tags').innerText = tagsArray.length > 0 ? `已修領域：${tagsArray.join(', ')}` : '';
+
+            // 渲染表格
             tableBody.innerHTML = '';
             courses.forEach(c => {
-                const typeBadge = c.type === '必' ? '<span class="badge bg-required">必修</span>' : '<span class="badge bg-elective">選修</span>';
+                // 根據不同的 subType 給予專屬的 CSS Class 顏色
+                let badgeClass = '';
+                if (c.subType === '專業必修') badgeClass = 'bg-major';
+                else if (c.subType === '校共同必修') badgeClass = 'bg-common';
+                else if (c.subType === '通識必修') badgeClass = 'bg-gened';
+                else badgeClass = 'bg-elective';
+
+                const typeBadge = `<span class="badge ${badgeClass}">${c.subType}</span>`;
                 const statusText = c.isPass ? '<span class="text-pass">及格</span>' : '<span class="text-fail">不及格</span>';
                 
                 const tr = document.createElement('tr');
