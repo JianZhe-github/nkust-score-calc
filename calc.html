@@ -1,0 +1,336 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>高科大學分計算器</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
+    <style>
+        :root {
+            --primary: #0056b3;
+            --success: #28a745;
+            --danger: #dc3545;
+            --info: #17a2b8;
+            --bg: #f8f9fa;
+        }
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; max-width: 900px; margin: 20px auto; padding: 0 20px; color: #333; line-height: 1.6; }
+        h1 { text-align: center; color: var(--primary); }
+        .upload-area { margin-bottom: 20px; padding: 30px; border: 2px dashed #adb5bd; border-radius: 8px; text-align: center; background-color: #fff; transition: 0.3s; }
+        .upload-area:hover { border-color: var(--primary); background-color: #f1f7ff; }
+        input[type="file"] { font-size: 16px; cursor: pointer; }
+        #status { font-weight: bold; color: var(--primary); text-align: center; margin-bottom: 20px; min-height: 24px; }
+        
+        /* 數據統計區 */
+        .dashboard { display: flex; gap: 15px; margin-bottom: 30px; display: none; flex-wrap: wrap; }
+        .card { flex: 1; min-width: 150px; background: var(--bg); padding: 15px; border-radius: 8px; text-align: center; box-shadow: 0 2px 4px rgba(0,0,0,0.1); border-bottom: 4px solid #ccc; display: flex; flex-direction: column; justify-content: center; }
+        .card.total { border-color: var(--primary); }
+        .card.required { border-color: var(--success); }
+        .card.elective { border-color: #fd7e14; }
+        .card.gened { border-color: var(--info); }
+        .card h3 { margin: 0 0 5px 0; font-size: 14px; color: #555; }
+        .card .number { font-size: 28px; font-weight: bold; color: #222; }
+        .gened-tags { font-size: 12px; color: #666; margin-top: 5px; min-height: 18px; font-weight: bold; }
+
+        table { width: 100%; border-collapse: collapse; margin-bottom: 40px; display: none; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
+        th, td { padding: 12px 15px; text-align: left; border-bottom: 1px solid #ddd; }
+        th { background-color: var(--primary); color: white; position: sticky; top: 0; }
+        tr:hover { background-color: #f5f5f5; }
+        .badge { padding: 4px 8px; border-radius: 4px; font-size: 12px; font-weight: bold; color: white; }
+        .bg-required { background-color: var(--success); }
+        .bg-elective { background-color: #fd7e14; }
+        .text-pass { color: var(--success); font-weight: bold; }
+        .text-fail { color: var(--danger); font-weight: bold; }
+    </style>
+</head>
+<body>
+
+    <h1>高科大學分計算器</h1>
+    <p style="text-align: center; color: #666;"> 本系統皆在本地運行 PDF不會上傳伺服器 </p>
+    
+    <div class="upload-area">
+        <label for="uploader" style="display: block; margin-bottom: 10px; font-weight: bold;">請選擇您的高科大成績單 PDF 檔案：</label>
+        <input type="file" id="uploader" accept="application/pdf">
+    </div>
+
+    <div id="status"></div>
+
+    <div class="dashboard" id="dashboard">
+        <div class="card total">
+            <h3>實得總學分</h3>
+            <div class="number" id="total-credits">0</div>
+        </div>
+        <div class="card required">
+            <h3>必修學分 (及格)</h3>
+            <div class="number" id="required-credits">0</div>
+        </div>
+        <div class="card elective">
+            <h3>選修學分 (及格)</h3>
+            <div class="number" id="elective-credits">0</div>
+        </div>
+        <div class="card gened">
+            <h3>通識分數 (及格)</h3>
+            <div class="number" id="gened-credits">0</div>
+            <div class="gened-tags" id="gened-tags"></div>
+        </div>
+    </div>
+
+    <table id="course-table">
+        <thead>
+            <tr>
+                <th>修別</th>
+                <th>課程名稱</th>
+                <th>學分</th>
+                <th>成績</th>
+                <th>狀態</th>
+            </tr>
+        </thead>
+        <tbody id="table-body"></tbody>
+    </table>
+
+    <script>
+        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.worker.min.js';
+
+        const uploader = document.getElementById('uploader');
+        const statusEl = document.getElementById('status');
+        const dashboard = document.getElementById('dashboard');
+        const courseTable = document.getElementById('course-table');
+        const tableBody = document.getElementById('table-body');
+
+        const isGarbage = (str) => {
+            const cleanStr = str.replace(/\s+/g, '');
+            if (/成績|學業|操行|總平均|學分|排名|百分比|學年度|學期|印製|註記|以下空白|第.*頁|共.*頁/.test(cleanStr)) return true;
+            if (/^[0-9.]+$/.test(cleanStr)) return true; 
+            if (cleanStr.replace(/[-—_=:：\/\[\]]/g, '').length === 0) return true; 
+            if (/^修別/.test(cleanStr)) return true;
+            if (/科目名稱/.test(cleanStr)) return true;
+            if (cleanStr.includes('國立高雄科技大學')) return true;
+            return false;
+        };
+
+        // 修改：將「博雅」加入排序權重第二順位
+        function getCategoryRank(courseName) {
+            if (/校(訂|定)/.test(courseName)) return 1;
+            if (/通識|博雅/.test(courseName)) return 2;
+            if (/中文|國文/.test(courseName)) return 3;
+            if (/英文/.test(courseName)) return 4;
+            if (/微積分/.test(courseName)) return 5;
+            if (/體育/.test(courseName)) return 6;
+            if (/服務教育/.test(courseName)) return 7;
+            return 8; 
+        }
+
+        function getCourseNumber(courseName) {
+            const numMap = { '一': 1, '二': 2, '三': 3, '四': 4, '五': 5, '六': 6, '七': 7, '八': 8, '九': 9, '十': 10 };
+            const match = courseName.match(/\(([一二三四五六七八九十])\)/);
+            return match ? numMap[match[1]] : 0; 
+        }
+
+        uploader.addEventListener('change', async (e) => {
+            const file = e.target.files[0];
+            if (!file || file.type !== 'application/pdf') return;
+
+            statusEl.innerText = '正在使用動態資料分群掃描 PDF...';
+            resetUI();
+
+            try {
+                const fileReader = new FileReader();
+                fileReader.onload = async function() {
+                    const typedarray = new Uint8Array(this.result);
+                    const pdf = await pdfjsLib.getDocument(typedarray).promise;
+                    
+                    let fullText = '';
+                    
+                    for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
+                        const page = await pdf.getPage(pageNum);
+                        const textContent = await page.getTextContent();
+                        
+                        const typeItems = textContent.items.filter(i => i.str.trim() === '必' || i.str.trim() === '選');
+                        const xs = typeItems.map(i => i.transform[4]);
+                        
+                        let clusters = [];
+                        xs.forEach(x => {
+                            let added = false;
+                            for (let cluster of clusters) {
+                                if (Math.abs(cluster.avg - x) < 30) {
+                                    cluster.xs.push(x);
+                                    cluster.avg = cluster.xs.reduce((a, b) => a + b, 0) / cluster.xs.length;
+                                    added = true;
+                                    break;
+                                }
+                            }
+                            if (!added) clusters.push({ xs: [x], avg: x });
+                        });
+
+                        clusters.sort((a, b) => a.avg - b.avg);
+
+                        let bounds = [];
+                        for (let i = 1; i < clusters.length; i++) {
+                            const minX = Math.min(...clusters[i].xs);
+                            bounds.push(minX - 15);
+                        }
+
+                        const cols = Array.from({ length: clusters.length > 0 ? clusters.length : 1 }, () => []);
+
+                        textContent.items.forEach(item => {
+                            if (item.str.trim() === '') return;
+                            const x = item.transform[4];
+                            
+                            let colIndex = 0;
+                            for (let i = 0; i < bounds.length; i++) {
+                                if (x > bounds[i]) colIndex = i + 1;
+                            }
+                            if (colIndex < cols.length) cols[colIndex].push(item);
+                        });
+
+                        const sortCol = (items) => {
+                            items.sort((a, b) => {
+                                const yA = a.transform[5];
+                                const yB = b.transform[5];
+                                if (Math.abs(yA - yB) > 8) return yB - yA; 
+                                return a.transform[4] - b.transform[4];
+                            });
+                            return items.map(i => i.str.trim()).join(' | ');
+                        };
+
+                        cols.forEach(colItems => {
+                            fullText += sortCol(colItems) + ' | ===COLUMN_BREAK=== | ';
+                        });
+                    }
+
+                    processData(fullText);
+                };
+                fileReader.readAsArrayBuffer(file);
+            } catch (error) {
+                statusEl.innerText = '解析失敗，請確認檔案格式是否正確。';
+                console.error(error);
+            }
+        });
+
+        function processData(text) {
+            const blocks = text.split('===COLUMN_BREAK===');
+            let courses = [];
+            
+            // 學分計算變數
+            let reqCredits = 0;
+            let eleCredits = 0;
+            let genEdCredits = 0;
+            let genEdTags = new Set(); // 使用 Set 來確保領域標籤不會重複
+
+            const regex = /(必|選)(?:\s*\|\s*)+([^\|]+?)(?:\s*\|\s*)+(\d+\.\d+)(?:\s*\|\s*)+([0-9\.]+|通過)/g;
+
+            blocks.forEach(block => {
+                if (!block.trim()) return;
+
+                let match;
+                let lastMatchEnd = 0;
+                let prevCourse = null;
+
+                while ((match = regex.exec(block)) !== null) {
+                    const gapText = block.substring(lastMatchEnd, match.index);
+                    const cleanedGap = gapText.replace(/\|/g, '').trim();
+
+                    if (prevCourse && cleanedGap.length > 0 && !isGarbage(cleanedGap)) {
+                        prevCourse.name += cleanedGap;
+                    }
+
+                    const type = match[1];
+                    const name = match[2].trim();
+                    const credit = parseFloat(match[3]);
+                    const scoreStr = match[4];
+                    const isPass = scoreStr === '通過' || parseFloat(scoreStr) >= 60;
+
+                    const courseObj = { type, name, credit, score: scoreStr, isPass };
+                    courses.push(courseObj);
+                    
+                    prevCourse = courseObj;
+                    lastMatchEnd = regex.lastIndex;
+                }
+
+                const finalGap = block.substring(lastMatchEnd);
+                const cleanedFinalGap = finalGap.replace(/\|/g, '').trim();
+                if (prevCourse && cleanedFinalGap.length > 0 && !isGarbage(cleanedFinalGap)) {
+                    prevCourse.name += cleanedFinalGap;
+                }
+            });
+
+            if (courses.length === 0) {
+                statusEl.innerText = '找不到課程資料，請確認是否為標準成績單。';
+                return;
+            }
+
+            courses.sort((a, b) => {
+                const rankA = getCategoryRank(a.name);
+                const rankB = getCategoryRank(b.name);
+                if (rankA !== rankB) return rankA - rankB;
+
+                const typeA = a.type === '必' ? 1 : 2;
+                const typeB = b.type === '必' ? 1 : 2;
+                if (typeA !== typeB) return typeA - typeB;
+
+                const numA = getCourseNumber(a.name);
+                const numB = getCourseNumber(b.name);
+                if (numA !== numB) return numA - numB;
+
+                return a.name.localeCompare(b.name, 'zh-TW');
+            });
+
+            // 計算學分與萃取通識標籤
+            courses.forEach(c => {
+                if (c.isPass) {
+                    if (c.type === '必') reqCredits += c.credit;
+                    if (c.type === '選') eleCredits += c.credit;
+
+                    // 修改：獨立計算通識/博雅學分，並抓取括號內的文字
+                    if (/通識|博雅/.test(c.name)) {
+                        genEdCredits += c.credit;
+                        
+                        // 使用正規表達式抓取半形 () 或全形 （） 內的文字
+                        const tagMatch = c.name.match(/[\(（]([^)）]+)[\)）]/);
+                        if (tagMatch && tagMatch[1]) {
+                            // 排除像是 (一)、(二) 這種集數標籤，只抓領域名稱
+                            if (!/^[一二三四五六七八九十]$/.test(tagMatch[1])) {
+                                genEdTags.add(tagMatch[1]);
+                            }
+                        }
+                    }
+                }
+            });
+
+            statusEl.innerText = `解析完成！共找到 ${courses.length} 筆課程紀錄。`;
+            document.getElementById('required-credits').innerText = reqCredits.toFixed(1);
+            document.getElementById('elective-credits').innerText = eleCredits.toFixed(1);
+            document.getElementById('total-credits').innerText = (reqCredits + eleCredits).toFixed(1);
+            
+            // 更新通識分數 UI 與標籤
+            document.getElementById('gened-credits').innerText = genEdCredits.toFixed(1);
+            const tagsArray = Array.from(genEdTags);
+            document.getElementById('gened-tags').innerText = tagsArray.length > 0 ? `領域：${tagsArray.join(', ')}` : '';
+
+            tableBody.innerHTML = '';
+            courses.forEach(c => {
+                const typeBadge = c.type === '必' ? '<span class="badge bg-required">必修</span>' : '<span class="badge bg-elective">選修</span>';
+                const statusText = c.isPass ? '<span class="text-pass">及格</span>' : '<span class="text-fail">不及格</span>';
+                
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td>${typeBadge}</td>
+                    <td>${c.name}</td>
+                    <td>${c.credit.toFixed(1)}</td>
+                    <td>${c.score}</td>
+                    <td>${statusText}</td>
+                `;
+                tableBody.appendChild(tr);
+            });
+
+            dashboard.style.display = 'flex';
+            courseTable.style.display = 'table';
+        }
+
+        function resetUI() {
+            dashboard.style.display = 'none';
+            courseTable.style.display = 'none';
+            tableBody.innerHTML = '';
+        }
+    </script>
+</body>
+</html>
